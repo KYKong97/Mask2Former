@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/devcontainers/features/conda:1",
+  "image": "ghcr.io/raucha/devcontainer-features/pytorch:1",
   "features": {
   }
 }

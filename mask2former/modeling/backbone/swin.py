@@ -755,15 +755,36 @@ class D2SwinTransformer(SwinTransformer, Backbone):
         for k in y.keys():
             if k in self._out_features:
                 outputs[k] = y[k]
+        print(">>>>>>>>>>>>>>>>>>>>>>>>")
+        for key,out in outputs.items():
+            print("Out Shape:",out.size())
+        outputs['res2'] = torch.randn((1,1536,128,128))
+        outputs['res3'] = torch.randn((1,1536,64,64))
+        outputs['res4'] = torch.randn((1,1536,32,32))
+        outputs['res5'] = torch.randn((1,1536,16,16))
+
         return outputs
 
     def output_shape(self):
-        return {
+        return_dict ={
             name: ShapeSpec(
                 channels=self._out_feature_channels[name], stride=self._out_feature_strides[name]
             )
             for name in self._out_features
         }
+        print(">>>>>>>>>>>>>>>>>>>return dict",return_dict) 
+        return {
+            name: ShapeSpec(
+                channels=1536, stride=self._out_feature_strides[name]
+            )
+            for name in self._out_features
+        }
+        # return {
+        #     name: ShapeSpec(
+        #         channels=self._out_feature_channels[name], stride=self._out_feature_strides[name]
+        #     )
+        #     for name in self._out_features
+        # }
 
     @property
     def size_divisibility(self):

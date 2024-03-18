@@ -297,6 +297,8 @@ class MSDeformAttnPixelDecoder(nn.Module):
         ret["input_shape"] = {
             k: v for k, v in input_shape.items() if k in cfg.MODEL.SEM_SEG_HEAD.IN_FEATURES
         }
+
+        
         ret["conv_dim"] = cfg.MODEL.SEM_SEG_HEAD.CONVS_DIM
         ret["mask_dim"] = cfg.MODEL.SEM_SEG_HEAD.MASK_DIM
         ret["norm"] = cfg.MODEL.SEM_SEG_HEAD.NORM

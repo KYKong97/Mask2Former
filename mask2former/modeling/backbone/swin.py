@@ -651,7 +651,7 @@ class SwinTransformer(nn.Module):
     def forward(self, x):
         """Forward function."""
         x = self.patch_embed(x)
-
+        print("Patch Size:",x.size())
         Wh, Ww = x.size(2), x.size(3)
         if self.ape:
             # interpolate the position embedding to the corresponding size
@@ -662,7 +662,7 @@ class SwinTransformer(nn.Module):
         else:
             x = x.flatten(2).transpose(1, 2)
         x = self.pos_drop(x)
-
+        print("Pos:",x.size())
         outs = {}
         for i in range(self.num_layers):
             layer = self.layers[i]
@@ -671,8 +671,9 @@ class SwinTransformer(nn.Module):
             if i in self.out_indices:
                 norm_layer = getattr(self, f"norm{i}")
                 x_out = norm_layer(x_out)
-
+                print("Before view:",x_out.size())
                 out = x_out.view(-1, H, W, self.num_features[i]).permute(0, 3, 1, 2).contiguous()
+                
                 outs["res{}".format(i + 2)] = out
 
         return outs
@@ -756,36 +757,59 @@ class D2SwinTransformer(SwinTransformer, Backbone):
             if k in self._out_features:
                 outputs[k] = y[k]
         print(">>>>>>>>>>>>>>>>>>>>>>>>")
-        for key,out in outputs.items():
-            print("Out Shape:",out.size())
-        outputs['res2'] = torch.randn((1,1536,128,128))
-        outputs['res3'] = torch.randn((1,1536,64,64))
-        outputs['res4'] = torch.randn((1,1536,32,32))
-        outputs['res5'] = torch.randn((1,1536,16,16))
+        new_outputs = {}
+        out_temp = outputs['res2'].clone()
+        out_temp = out_temp.permute(0,2,3,1)
+        out_temp = F.interpolate(out_temp,scale_factor=(1,8))
+        out_temp = out_temp.permute(0,3,1,2)
+        new_outputs['res2'] = out_temp.clone()
+
+        out_temp = outputs['res3'].clone()
+        out_temp = out_temp.permute(0,2,3,1)
+        out_temp = F.interpolate(out_temp,scale_factor=(1,4))
+        out_temp = out_temp.permute(0,3,1,2)
+        new_outputs['res3'] = out_temp.clone()
+
+        out_temp = outputs['res4'].clone()
+        out_temp = out_temp.permute(0,2,3,1)
+        out_temp = F.interpolate(out_temp,scale_factor=(1,2))
+        out_temp = out_temp.permute(0,3,1,2)
+        new_outputs['res4'] = out_temp.clone()
+
+        out_temp = outputs['res5'].clone()
+        new_outputs['res5'] = out_temp.clone()
+
+        for key,out in new_outputs.items():
+            print("Output:",out.size())
 
         return outputs
 
     def output_shape(self):
-        return_dict ={
-            name: ShapeSpec(
-                channels=self._out_feature_channels[name], stride=self._out_feature_strides[name]
-            )
-            for name in self._out_features
-        }
-        print(">>>>>>>>>>>>>>>>>>>return dict",return_dict) 
-        return {
-            name: ShapeSpec(
-                channels=1536, stride=self._out_feature_strides[name]
-            )
-            for name in self._out_features
-        }
-        # return {
+        # return_dict ={
         #     name: ShapeSpec(
         #         channels=self._out_feature_channels[name], stride=self._out_feature_strides[name]
         #     )
         #     for name in self._out_features
         # }
+        # print(">>>>>>>>>>>>>>>>>>>return dict",return_dict) 
+        # return {
+        #     name: ShapeSpec(
+        #         channels=1536, stride=self._out_feature_strides[name]
+        #     )
+        #     for name in self._out_features
+        # }
+        return {
+            name: ShapeSpec(
+                channels=self._out_feature_channels[name], stride=self._out_feature_strides[name]
+            )
+            for name in self._out_features
+        }
 
     @property
     def size_divisibility(self):
         return 32
+if __name__=="__main__":
+    model = SwinTransformer()
+    tensor = torch.randn((1,3,224,224))
+    output = model(tensor)
+    print(output.size())

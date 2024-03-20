@@ -745,6 +745,7 @@ class D2SwinTransformerV2(SwinTransformerV2, Backbone):
         ape = cfg.MODEL.SWIN.APE
         patch_norm = cfg.MODEL.SWIN.PATCH_NORM
         use_checkpoint = cfg.MODEL.SWIN.USE_CHECKPOINT
+        pretrained_window_sizes = cfg.MODEL.SWIN.PRETRAINED_WINDOW_SIZES
 
         super().__init__(
             pretrain_img_size,
@@ -764,6 +765,7 @@ class D2SwinTransformerV2(SwinTransformerV2, Backbone):
             ape,
             patch_norm,
             use_checkpoint=use_checkpoint,
+            pretrained_window_sizes=pretrained_window_sizes
         )
 
         self._out_features = cfg.MODEL.SWIN.OUT_FEATURES

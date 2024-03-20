@@ -154,7 +154,7 @@ class WindowAttention(nn.Module):
 
         # cosine attention
         attn = (F.normalize(q, dim=-1) @ F.normalize(k, dim=-1).transpose(-2, -1))
-        logit_scale = torch.clamp(self.logit_scale, max=torch.log(torch.tensor(1. / 0.01))).exp()
+        logit_scale = torch.clamp(self.logit_scale, max=torch.log(torch.tensor(1. / 0.01).to(self.logit_scale.device))).exp()
         attn = attn * logit_scale
 
         relative_position_bias_table = self.cpb_mlp(self.relative_coords_table).view(-1, self.num_heads)
@@ -269,13 +269,21 @@ class SwinTransformerBlock(nn.Module):
         self.register_buffer("attn_mask", attn_mask)
 
     def forward(self, x,attn_mask):
-        H, W = self.input_resolution
         B, L, C = x.shape
+        H, W = self.H, self.W
         assert L == H * W, "input feature has wrong size"
 
         shortcut = x
+        x = self.norm1(x)
         x = x.view(B, H, W, C)
 
+        # pad feature maps to multiples of window size
+        pad_l = pad_t = 0
+        pad_r = (self.window_size - W % self.window_size) % self.window_size
+        pad_b = (self.window_size - H % self.window_size) % self.window_size
+        x = F.pad(x, (0, 0, pad_l, pad_r, pad_t, pad_b))
+        _, Hp, Wp, _ = x.shape
+        
         # cyclic shift
         if self.shift_size > 0:
             shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
@@ -287,17 +295,20 @@ class SwinTransformerBlock(nn.Module):
         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
         # W-MSA/SW-MSA
-        attn_windows = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+        attn_windows = self.attn(x_windows, mask=attn_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-        shifted_x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
+        shifted_x = window_reverse(attn_windows, self.window_size, Hp, Wp)  # B H' W' C
 
         # reverse cyclic shift
         if self.shift_size > 0:
             x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
         else:
             x = shifted_x
+        
+        if pad_r > 0 or pad_b > 0:
+            x = x[:, :H, :W, :].contiguous()
         x = x.view(B, H * W, C)
         x = shortcut + self.drop_path(self.norm1(x))
 
@@ -345,7 +356,7 @@ class PatchMerging(nn.Module):
         """
         x: B, H*W, C
         """
-        H, W = self.input_resolution
+        # H, W = self.input_resolution
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
         assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
@@ -534,9 +545,14 @@ class PatchEmbed(nn.Module):
         
         B, C, H, W = x.shape
         # FIXME look at relaxing size constraints
-        assert H == self.img_size[0] and W == self.img_size[1], \
-            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-        x = self.proj(x)
+
+        _, _, H, W = x.size()
+        if W % self.patch_size[1] != 0:
+            x = F.pad(x, (0, self.patch_size[1] - W % self.patch_size[1]))
+        if H % self.patch_size[0] != 0:
+            x = F.pad(x, (0, 0, 0, self.patch_size[0] - H % self.patch_size[0]))
+
+        x = self.proj(x)  # B C Wh Ww
         if self.norm is not None:
             Wh, Ww = x.size(2), x.size(3)
             x = x.flatten(2).transpose(1, 2)
@@ -583,7 +599,7 @@ class SwinTransformerV2(nn.Module):
                  window_size=7, mlp_ratio=4., qkv_bias=True,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.2,
                  norm_layer=nn.LayerNorm, ape=False, patch_norm=True,out_indices=(0, 1, 2, 3),
-                 use_checkpoint=False, pretrained_window_sizes=[0, 0, 0, 0], **kwargs):
+                 use_checkpoint=False, pretrained_window_sizes=[0, 0, 0, 0],frozen_stages=-1, **kwargs):
         super().__init__()
 
         self.num_classes = num_classes
@@ -594,6 +610,7 @@ class SwinTransformerV2(nn.Module):
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
         self.mlp_ratio = mlp_ratio
         self.out_indices = out_indices
+        self.frozen_stages = frozen_stages
 
         # split image into non-overlapping patches
         self.patch_embed = PatchEmbed(
@@ -681,14 +698,15 @@ class SwinTransformerV2(nn.Module):
                 for param in m.parameters():
                     param.requires_grad = False
     def forward_features(self, x):
+        print("X size",x.size())
         x = self.patch_embed(x)
         Wh, Ww = x.size(2), x.size(3)
-        print("Before patch:",x.size())
+        
         x = x.flatten(2).transpose(1, 2)  # B Ph*Pw C
         if self.ape:
             x = x + self.absolute_pos_embed
         x = self.pos_drop(x)
-        print("Pos:",x.size())
+        
 
         outs = {}
         for i in range(self.num_layers):
@@ -711,7 +729,7 @@ class SwinTransformerV2(nn.Module):
 
     def forward(self, x):
         x = self.forward_features(x)
-        x = self.head(x)
+        
         return x
 
     def flops(self):
@@ -747,23 +765,24 @@ class D2SwinTransformerV2(SwinTransformerV2, Backbone):
         use_checkpoint = cfg.MODEL.SWIN.USE_CHECKPOINT
         pretrained_window_sizes = cfg.MODEL.SWIN.PRETRAINED_WINDOW_SIZES
 
+
         super().__init__(
-            pretrain_img_size,
-            patch_size,
-            in_chans,
-            embed_dim,
-            depths,
-            num_heads,
-            window_size,
-            mlp_ratio,
-            qkv_bias,
-            qk_scale,
-            drop_rate,
-            attn_drop_rate,
-            drop_path_rate,
-            norm_layer,
-            ape,
-            patch_norm,
+            img_size=pretrain_img_size,
+            patch_size=patch_size,
+            in_chans=in_chans,
+            embed_dim=embed_dim,
+            depths=depths,
+            num_heads=num_heads,
+            window_size=window_size,
+            mlp_ratio=mlp_ratio,
+            qkv_bias=qkv_bias,
+            qk_scale=qk_scale,
+            drop_rate=drop_rate,
+            attn_drop_rate=attn_drop_rate,
+            drop_path_rate=drop_path_rate,
+            norm_layer=norm_layer,
+            ape=ape,
+            patch_norm=patch_norm,
             use_checkpoint=use_checkpoint,
             pretrained_window_sizes=pretrained_window_sizes
         )

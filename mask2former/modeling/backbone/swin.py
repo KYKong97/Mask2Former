@@ -650,8 +650,9 @@ class SwinTransformer(nn.Module):
 
     def forward(self, x):
         """Forward function."""
+        print(x.size())
         x = self.patch_embed(x)
-        print("Patch Size:",x.size())
+        
         Wh, Ww = x.size(2), x.size(3)
         if self.ape:
             # interpolate the position embedding to the corresponding size
@@ -662,7 +663,7 @@ class SwinTransformer(nn.Module):
         else:
             x = x.flatten(2).transpose(1, 2)
         x = self.pos_drop(x)
-        print("Pos:",x.size())
+        
         outs = {}
         for i in range(self.num_layers):
             layer = self.layers[i]
@@ -671,7 +672,7 @@ class SwinTransformer(nn.Module):
             if i in self.out_indices:
                 norm_layer = getattr(self, f"norm{i}")
                 x_out = norm_layer(x_out)
-                print("Before view:",x_out.size())
+                
                 out = x_out.view(-1, H, W, self.num_features[i]).permute(0, 3, 1, 2).contiguous()
                 
                 outs["res{}".format(i + 2)] = out

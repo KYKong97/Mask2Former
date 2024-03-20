@@ -88,6 +88,7 @@ def add_maskformer2_config(cfg):
     cfg.MODEL.SWIN.PATCH_NORM = True
     cfg.MODEL.SWIN.OUT_FEATURES = ["res2", "res3", "res4", "res5"]
     cfg.MODEL.SWIN.USE_CHECKPOINT = False
+    cfg.MODEL.SWIN.PRETRAINED_WINDOW_SIZES=[ 12, 12, 12, 6 ]
 
     # NOTE: maskformer2 extra configs
     # transformer module

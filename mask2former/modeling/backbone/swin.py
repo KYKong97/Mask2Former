@@ -809,7 +809,7 @@ class D2SwinTransformer(SwinTransformer, Backbone):
     def size_divisibility(self):
         return 32
 if __name__=="__main__":
-    model = SwinTransformer()
-    tensor = torch.randn((1,3,224,224))
+    model = SwinTransformer(embed_dim=192,depths=[2,2,18,2],num_heads=[6,12,24,48],window_size=12,drop_path_rate=0.3,patch_norm=True,pretrain_img_size=384)
+    tensor = torch.randn((1,3,384,384))
     output = model(tensor)
     print(output.size())

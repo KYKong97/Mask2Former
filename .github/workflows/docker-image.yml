@@ -30,4 +30,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: kuokyong1997/zs3:v3
+          tags: kuokyong1997/zs3:cuda11

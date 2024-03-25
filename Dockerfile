@@ -3,7 +3,7 @@ FROM tverous/pytorch-notebook:base
 WORKDIR /app
 COPY . .
 
-
+RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 RUN pip install --progress-bar off 'git+https://github.com/facebookresearch/detectron2.git' \
     'git+https://github.com/cocodataset/panopticapi.git' \
     'git+https://github.com/mcordts/cityscapesScripts.git' \
